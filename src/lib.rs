@@ -23,6 +23,9 @@ pub fn initialize_bevy_app(canvas_id: &str) -> Result<(), JsValue> {
     Ok(())
 }
 
+// URL remota del modelo 3D proporcionada por el usuario
+const MODEL_URL: &str = "https://nymia-bucket.s3.sa-east-1.amazonaws.com/3d-models/Mita.glb#Scene0";
+
 pub fn run(canvas_id: String) {
     let mut app = App::new();
     
@@ -81,7 +84,8 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
     // Modelo 3D
     commands.spawn((
         SceneBundle {
-            scene: asset_server.load("Mita.glb#Scene0"),
+            // Cargar modelo desde la URL remota
+            scene: asset_server.load(MODEL_URL),
             ..default()
         },
         AvatarModel,
