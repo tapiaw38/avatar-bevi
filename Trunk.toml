@@ -1,0 +1,18 @@
+[build]
+target = "index.html"
+release = true
+
+[serve]
+port = 8080
+
+[watch]
+watch = ["src", "index.html", "assets"]
+
+[[hooks]]
+stage = "build"
+command = "cargo"
+command_arguments = ["build", "--release", "--target", "wasm32-unknown-unknown"]
+
+[[copy]]
+source = "assets"
+destination = "assets"
