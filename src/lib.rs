@@ -1,104 +1,171 @@
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    window::{Window, WindowPlugin},
+    core_pipeline::clear_color::ClearColorConfig,
+    asset::LoadState,
+};
 use wasm_bindgen::prelude::*;
+
+#[cfg(target_arch = "wasm32")]
+use web_sys::console;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 
+// Función para debuggear la carga del modelo Mita
+#[cfg(target_arch = "wasm32")]
+fn log_external_model_loading() {
+    console::log_1(&"Cargando modelo Mita.glb desde archivo local...".into());
+}
+
 #[derive(Resource)]
+#[allow(dead_code)]
 struct CanvasId(pub String);
 
+// URL del modelo 3D específico del usuario (ahora local)
+const MODEL_URL: &str = "models/mita.glb#Scene0";
+
 #[wasm_bindgen]
-pub fn initialize_bevy_app(canvas_id: &str) -> Result<(), JsValue> {
+pub fn initialize_bevy_app(canvas_id: String) -> Result<(), JsValue> {
     #[cfg(target_arch = "wasm32")]
     console_error_panic_hook::set_once();
     
     #[cfg(target_arch = "wasm32")]
     spawn_local(async move {
-        run(canvas_id.to_string());
+        run(canvas_id);
     });
 
     #[cfg(not(target_arch = "wasm32"))]
-    run(canvas_id.to_string());
+    run(canvas_id);
 
     Ok(())
 }
 
-// URL remota del modelo 3D proporcionada por el usuario
-const MODEL_URL: &str = "https://nymia-bucket.s3.sa-east-1.amazonaws.com/3d-models/Mita.glb#Scene0";
-
-pub fn run(canvas_id: String) {
-    let mut app = App::new();
-    
-    // Configuraciones específicas para WebAssembly
-    #[cfg(target_arch = "wasm32")]
-    {
-        use bevy::winit::WinitSettings;
-        use bevy::window::{PrimaryWindow, WindowRef, WindowResolution};
-        use web_sys::window;
-        
-        let window = window().unwrap();
-        let document = window.document().unwrap();
-        let canvas = document.get_element_by_id(&canvas_id).unwrap();
-        
-        app.insert_resource(WinitSettings {
-            return_from_run: true,
-            ..WinitSettings::default()
-        });
-        
-        app.insert_resource(CanvasId(canvas_id));
-    }
-    
-    app.add_plugins(DefaultPlugins.set(WindowPlugin {
-        primary_window: Some(Window {
-            #[cfg(target_arch = "wasm32")]
-            canvas: Some(format!("#{}", app.world.resource::<CanvasId>().0)),
+fn setup(
+    mut commands: Commands,
+    server: Res<AssetServer>,
+) {
+    // Luz direccional principal
+    commands.spawn(DirectionalLightBundle {
+        directional_light: DirectionalLight {
+            illuminance: 10000.0,
+            shadows_enabled: true,
             ..default()
-        }),
+        },
+        transform: Transform::from_xyz(10.0, 10.0, 10.0).looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
-    }))
-    .add_systems(Startup, setup)
-    .add_systems(Update, rotate_model)
-    .run();
-}
+    });
 
-fn setup(mut commands: Commands, asset_server: Res<AssetServer>) {
-    // Cámara
+    // Luz ambiental
+    commands.insert_resource(AmbientLight {
+        color: Color::WHITE,
+        brightness: 0.5,
+    });
+
+    // Cámara con fondo de color
     commands.spawn(Camera3dBundle {
-        transform: Transform::from_xyz(0.0, 1.5, 5.0)
+        camera_3d: Camera3d {
+            clear_color: ClearColorConfig::Custom(Color::rgb(0.2, 0.2, 0.3)),
+            ..default()
+        },
+        transform: Transform::from_xyz(0.0, 0.0, 5.0)
             .looking_at(Vec3::ZERO, Vec3::Y),
         ..default()
     });
 
-    // Luz
-    commands.spawn(PointLightBundle {
-        transform: Transform::from_xyz(4.0, 8.0, 4.0),
-        point_light: PointLight {
-            intensity: 2000.0,
-            range: 10.0,
-            shadows_enabled: true,
-            ..default()
-        },
+    // Modelo 3D específico del usuario (Mita.glb) - único modelo en la escena
+    #[cfg(target_arch = "wasm32")]
+    log_external_model_loading();
+    
+    commands.spawn(SceneBundle {
+        scene: server.load(MODEL_URL),
+        transform: Transform::from_xyz(0.0, 0.0, 0.0)
+            .with_scale(Vec3::splat(1.0)), // Escala normal para ver el modelo
         ..default()
-    });
-
-    // Modelo 3D
-    commands.spawn((
-        SceneBundle {
-            // Cargar modelo desde la URL remota
-            scene: asset_server.load(MODEL_URL),
-            ..default()
-        },
-        AvatarModel,
-    ));
+    }).insert(MitaModel);
 }
 
-// Componente para marcar nuestro modelo
-#[derive(Component)]
-struct AvatarModel;
+pub fn run(canvas_id: String) {
+    let mut app = App::new();
+    
+    #[cfg(target_arch = "wasm32")]
+    {
+        use bevy::winit::WinitSettings;
+        app.insert_resource(WinitSettings::desktop_app())
+            .insert_resource(CanvasId(canvas_id.clone()));
+    }
+    
+    app.add_plugins(DefaultPlugins.set(WindowPlugin {
+        primary_window: Some(Window {
+            canvas: Some(format!("#{}", canvas_id)),
+            fit_canvas_to_parent: true,
+            resolution: (800.0, 600.0).into(),
+            ..default()
+        }),
+        ..default()
+    }))
+    .add_startup_system(setup)
+    .add_system(rotate_model)
+    .add_system(debug_mita_model_loading)
+    .run();
+}
 
-// Sistema para rotar el modelo
-fn rotate_model(mut query: Query<&mut Transform, With<AvatarModel>>, time: Res<Time>) {
+// Componente para el modelo Mita específico
+#[derive(Component)]
+struct MitaModel;
+
+// Sistema para rotar el modelo Mita
+fn rotate_model(time: Res<Time>, mut query: Query<&mut Transform, With<MitaModel>>) {
     for mut transform in query.iter_mut() {
-        transform.rotation *= Quat::from_rotation_y(0.3 * time.delta_seconds());
+        transform.rotate_y(0.5 * time.delta_seconds());
+    }
+}
+
+// Sistema para debuggear la carga del modelo Mita
+fn debug_mita_model_loading(
+    server: Res<AssetServer>,
+    mut has_printed: Local<bool>,
+    mut error_count: Local<u32>,
+    mita_handles: Query<&Handle<Scene>, With<MitaModel>>,
+    scenes: Res<Assets<Scene>>,
+) {
+    if !*has_printed {
+        let load_state = server.get_load_state(MODEL_URL);
+        
+        match load_state {
+            LoadState::Failed => {
+                *error_count += 1;
+                error!("Error al cargar el modelo Mita.glb (intento {})", *error_count);
+                
+                // Si hemos intentado demasiadas veces, marcar como impreso para evitar spam
+                if *error_count >= 3 {
+                    error!("Modelo Mita.glb no disponible después de {} intentos.", *error_count);
+                    *has_printed = true;
+                }
+            }
+            LoadState::Loaded => {
+                info!("Modelo Mita.glb cargado exitosamente");
+                *has_printed = true;
+            }
+            LoadState::Loading => {
+                info!("Cargando modelo Mita.glb...");
+            }
+            LoadState::NotLoaded => {
+                info!("Modelo Mita.glb no iniciado");
+            }
+            LoadState::Unloaded => {
+                info!("Modelo Mita.glb descargado");
+            }
+        }
+        
+        // Verificar si el modelo se cargó correctamente
+        for handle in mita_handles.iter() {
+            if let Some(scene) = scenes.get(handle) {
+                info!("Modelo Mita cargado con {} entidades", scene.world.entities().len());
+                *has_printed = true;
+            } else {
+                info!("Modelo Mita aún no cargado en Assets<Scene>");
+            }
+        }
     }
 }

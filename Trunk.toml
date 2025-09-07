@@ -1,12 +1,39 @@
 [build]
 target = "index.html"
 release = true
-
-[serve]
-port = 8080
+dist = "dist"
+public_url = "/"
 
 [watch]
-watch = ["src", "index.html", "assets"]
+watch = ["src", "index.html", "public"]
+
+[serve]
+address = "127.0.0.1"
+port = 3000
+open = false
+
+[serve.headers]
+"*.wasm" = "application/wasm"
+"*.js" = "text/javascript"
+"content-security-policy" = "default-src 'self' 'unsafe-eval' 'unsafe-inline' 'wasm-unsafe-eval' https: data:"
+"cross-origin-opener-policy" = "same-origin"
+"cross-origin-embedder-policy" = "require-corp"
+"access-control-allow-origin" = "*"
+"access-control-allow-methods" = "GET, POST, PUT, DELETE, OPTIONS"
+"access-control-allow-headers" = "Content-Type, Authorization"
+
+[[hooks]]
+stage = "pre_build"
+command = "sh"
+command_arguments = ["-c", "./download_model.sh && rm -rf dist/*"]
+
+[[hooks]]
+stage = "build"
+command = "sh"
+command_arguments = ["-c", "mkdir -p dist && cp -r assets/models dist/assets/"]
+
+[serve.static_dir]
+mime_types = { wasm = "application/wasm", js = "application/javascript", glb = "application/octet-stream", gltf = "model/gltf+json" }
 
 [[hooks]]
 stage = "build"

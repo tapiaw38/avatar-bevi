@@ -1,0 +1,7 @@
+{
+  "asset_servers": {
+    "external": {
+      "base_url": "https://nymia-bucket.s3.sa-east-1.amazonaws.com/3d-models/"
+    }
+  }
+}
